@@ -18,8 +18,9 @@ import subprocess
 import nvwave
 import speech
 import addonHandler
+import logHandler
 from comtypes.client import CreateObject as COMCreate
-from .OCREnhance import recogUiEnhance, beepThread, totalCommanderHelper, xplorer2Helper
+from .OCREnhance import recogUiEnhance, beepThread, totalCommanderHelper, xplorer2Helper, twain
 from .OCREnhance.recogUiEnhance import queue_ui_message
 from visionEnhancementProviders.screenCurtain import ScreenCurtainProvider
 from contentRecog import recogUi
@@ -38,6 +39,26 @@ pdfToImagePath = "" + os.path.join (addonPath, "images") + ""
 pdfToImageFileNamePath = pdfToImagePath + "\\img"
 
 ADDON_SUMMARY = addonHandler.getCodeAddon().manifest["summary"]
+
+
+class TwainThread(threading.Thread):
+        def run(self):
+                ret = None
+                
+                try:
+                        ret = twain.acquire(os.path.join(os.getenv("USERPROFILE"), "Desktop", "image.jpg"),
+                                            pixel_type='gray',
+                                            parent_window=api.getFocusObject().windowHandle,
+                                            show_ui=True)
+                except Exception as ex:
+                        logHandler.log.exception("Failed to acquire image: {why}".format(why=ex))
+                        ret = None
+                if ret is None:
+                        queue_ui_message("Cancelled")
+                else:
+                        logHandler.log.info("We got an image {data}".format(data=ret))
+        
+
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	scriptCategory = ADDON_SUMMARY
@@ -88,7 +109,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				self.recogUiEnhance.recognizeImageFileObject(filePath)
 		else:
 			pass
-
+	@script(
+		# Translators: Message presented in input help mode.
+		description=_("Recognize content from scanner."),
+		gesture="kb:NVDA+shift+space"
+	)
+	def script_doRecognizeFromTwainScanner(self, gesture):
+                t = TwainThread()
+                t.start()
 	def getFilePath(self): #For this method thanks to some nvda addon developers ( code snippets and suggestion)
 		global filePath
 		global fileExtension
